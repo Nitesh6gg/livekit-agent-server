@@ -1,4 +1,5 @@
 import { ServerOptions, cli, defineAgent, inference, voice } from '@livekit/agents';
+import * as sarvam from '@livekit/agents-plugin-sarvam';
 import { audioEnhancement } from '@livekit/plugins-ai-coustics';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
@@ -11,20 +12,22 @@ dotenv.config({ path: '.env.local' });
 
 export default defineAgent({
   entry: async (ctx) => {
-    // Set up a voice AI pipeline using AssemblyAI, Fish Audio, and the LiveKit turn detector
+    // Set up a voice AI pipeline using Sarvam STT/TTS and the LiveKit turn detector
     const session = new voice.AgentSession({
       // Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
-      // See all available models at https://docs.livekit.io/agents/models/stt/
-      stt: new inference.STT({
-        model: 'assemblyai/universal-3-5-pro',
-        language: 'en',
+      // Uses the Sarvam plugin directly with your own SARVAM_API_KEY, rather than LiveKit Inference
+      stt: new sarvam.STT({
+        model: 'saaras:v3',
+        languageCode: 'unknown', // auto-detect the language the user is speaking
+        mode: 'transcribe',
       }),
 
       // Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
-      // See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
-      tts: new inference.TTS({
-        model: 'fishaudio/s2.1-pro',
-        voice: 'fa4c9eb3dccc4806b382b40d61c6b10a',
+      // Uses the Sarvam plugin directly with your own SARVAM_API_KEY, rather than LiveKit Inference
+      tts: new sarvam.TTS({
+        model: 'bulbul:v3',
+        speaker: 'shubh',
+        targetLanguageCode: 'hi-IN', // replies are always spoken in Hindi; TTS has no auto-detect
       }),
 
       turnHandling: {
@@ -41,11 +44,9 @@ export default defineAgent({
         preemptiveGeneration: { enabled: true },
       },
 
-      // Expressive mode injects the TTS provider's markup guide into the LLM prompt, so the model
-      // emits inline delivery tags (emotion, pacing, non-verbal sounds) that the TTS renders and
-      // the transcript never shows. Requires a TTS model that supports markup, such as the Fish
-      // Audio model above.
-      expressive: true,
+      // Expressive mode is disabled: it requires a LiveKit Inference TTS model that declares a
+      // markup dialect (e.g. Fish Audio, Inworld, Cartesia, xAI), which Sarvam does not.
+      expressive: false,
     });
 
     // Start the session, which initializes the voice pipeline and warms up the models
