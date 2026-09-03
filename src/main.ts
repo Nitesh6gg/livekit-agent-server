@@ -36,6 +36,13 @@ export default defineAgent({
         // AgentSession supplies the required VAD automatically.
         // See more at https://docs.livekit.io/agents/logic/turns/turn-detector/
         turnDetection: new inference.TurnDetector(),
+        endpointing: {
+          // Raised from the 500ms default to give Sarvam STT (slower over 8kHz phone audio)
+          // more time to deliver its final transcript before the turn is committed. Without
+          // this, late transcripts arrive after the turn already closed, invalidating an
+          // in-progress response and causing an audible cutoff/restart.
+          minDelay: 900,
+        },
         // Adaptive interruptions use the turn detector to tell a real interruption from a
         // backchannel like "mhm" or "right", so the agent keeps talking through the latter.
         interruption: { mode: 'adaptive' },
