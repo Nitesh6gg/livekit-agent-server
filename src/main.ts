@@ -1,6 +1,5 @@
 import { ServerOptions, cli, defineAgent, inference, voice } from '@livekit/agents';
 import * as sarvam from '@livekit/agents-plugin-sarvam';
-import { audioEnhancement } from '@livekit/plugins-ai-coustics';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { createAgent } from './agent.ts';
@@ -8,7 +7,7 @@ import { createAgent } from './agent.ts';
 // Load environment variables from a local file.
 // Make sure to set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET
 // when running locally or self-hosting your agent server.
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
 
 export default defineAgent({
   entry: async (ctx) => {
@@ -50,14 +49,12 @@ export default defineAgent({
     });
 
     // Start the session, which initializes the voice pipeline and warms up the models
+    // Note: no noiseCancellation is configured. Enhanced NC providers (ai-coustics, Krisp)
+    // require either LiveKit Cloud or your own provider license key for self-hosted use,
+    // and WebRTC's built-in NC is client-side only (doesn't cover SIP/telephony audio).
     await session.start({
       agent: createAgent(),
       room: ctx.room,
-      inputOptions: {
-        // ai-coustics QUAIL audio enhancement for noise cancellation
-        // Works for both WebRTC and telephony (SIP) participants
-        noiseCancellation: audioEnhancement({ model: 'quailVfS' }),
-      },
     });
 
     // // Add a virtual avatar to the session, if desired
@@ -85,6 +82,6 @@ export default defineAgent({
 cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
-    agentName: 'my-agent',
+    agentName: 'survey-agent',
   }),
 );
