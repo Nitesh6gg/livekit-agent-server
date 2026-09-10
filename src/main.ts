@@ -25,7 +25,7 @@ export default defineAgent({
       // Uses the Sarvam plugin directly with your own SARVAM_API_KEY, rather than LiveKit Inference
       tts: new sarvam.TTS({
         model: 'bulbul:v3',
-        speaker: 'shubh',
+        speaker: 'simran',
         targetLanguageCode: 'hi-IN', // replies are always spoken in Hindi; TTS has no auto-detect
       }),
 
