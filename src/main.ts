@@ -1,4 +1,4 @@
-import { ServerOptions, cli, defineAgent, inference, voice } from '@livekit/agents';
+import { ServerOptions, cli, defineAgent, inference, metrics, voice } from '@livekit/agents';
 import * as sarvam from '@livekit/agents-plugin-sarvam';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +63,23 @@ export default defineAgent({
       agent: createAgent(),
       room: ctx.room,
     });
+
+    // Log per-turn latency and usage metrics (LLM TTFT, TTS TTFB, end-to-end) to the same logger
+    // used for all other agent logs.
+    session.on(voice.AgentSessionEventTypes.MetricsCollected, (ev) => {
+      metrics.logMetrics(ev.metrics);
+    });
+
+    // Hard cap on call duration: ends the call after 15 minutes regardless of what's being said,
+    // as a safety net alongside the prompt-level guardrail that asks Avni to end early on misuse.
+    // deleteRoom (not session.close) is required to actually hang up the SIP caller, matching the
+    // end-call tool below - otherwise the caller's phone line stays connected in an empty room.
+    const HARD_CALL_LIMIT_MS = 15 * 60 * 1000;
+    const hardLimitTimer = setTimeout(async () => {
+      await session.say('Samay ho gaya hai, main call yahin samaapt karti hoon. Dhanyavaad.');
+      await ctx.deleteRoom();
+    }, HARD_CALL_LIMIT_MS);
+    ctx.addShutdownCallback(async () => clearTimeout(hardLimitTimer));
 
     // // Add a virtual avatar to the session, if desired
     // // For other providers, see https://docs.livekit.io/agents/models/avatar/
