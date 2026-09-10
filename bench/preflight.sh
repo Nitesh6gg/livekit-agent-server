@@ -70,11 +70,24 @@ if command -v pm2 >/dev/null 2>&1; then
   echo "--- Agent worker ($APP_NAME) ---"
 
   PM2_JSON="$(pm2 jlist 2>/dev/null || echo '[]')"
-  APP_JSON="$(node -e "
-    const apps = JSON.parse(process.argv[1]);
-    const app = apps.find(a => a.name === process.argv[2]);
-    console.log(app ? JSON.stringify(app) : '');
-  " "$PM2_JSON" "$APP_NAME" 2>/dev/null || true)"
+  # pm2 allows multiple process-table entries with the same name (e.g. a stale one left behind
+  # by an earlier `pm2 start` that was never `pm2 delete`d, plus a fresh one started the normal
+  # way). Picking the first match is wrong and has already produced a false FAIL here - prefer
+  # whichever entry is actually online, and surface the duplication itself as something to clean
+  # up rather than silently picking one.
+  LOOKUP="$(node -e "
+    const apps = JSON.parse(process.argv[1]).filter(a => a.name === process.argv[2]);
+    const online = apps.find(a => a.pm2_env.status === 'online');
+    const chosen = online || apps[0] || null;
+    console.log(JSON.stringify({ count: apps.length, chosen }));
+  " "$PM2_JSON" "$APP_NAME" 2>/dev/null || echo '{"count":0,"chosen":null}')"
+
+  DUP_COUNT="$(node -e "console.log(JSON.parse(process.argv[1]).count)" "$LOOKUP" 2>/dev/null || echo 0)"
+  APP_JSON="$(node -e "const c=JSON.parse(process.argv[1]).chosen; console.log(c?JSON.stringify(c):'')" "$LOOKUP" 2>/dev/null || true)"
+
+  if [ "$DUP_COUNT" -gt 1 ]; then
+    warn "$DUP_COUNT pm2 entries named '$APP_NAME' exist (ids visible via 'pm2 list') - using the online one for these checks, but the stale entries should be 'pm2 delete'd so this can't pick the wrong one silently."
+  fi
 
   if [ -z "$APP_JSON" ]; then
     warn "no pm2 process named '$APP_NAME' found on this host - skipping agent checks"
@@ -105,12 +118,29 @@ if command -v pm2 >/dev/null 2>&1; then
   echo
 fi
 
-# --- LiveKit / SIP checks (only if this looks like .20) ----------------------------------
+# --- LiveKit / SIP checks (only if this host actually runs these containers) -------------
+# Gating on `command -v docker` alone isn't enough: a host can have the Docker client
+# installed without running the SFU/SIP stack (e.g. .19, the agent worker). Only enter this
+# section if at least one target container is found here at all - otherwise this genuinely
+# isn't the SIP/SFU host and failing over containers it was never meant to run is wrong.
+DOCKER_HOST_MATCH=0
 if command -v docker >/dev/null 2>&1; then
+  for c in "$SIP_CONTAINER" "$LIVEKIT_CONTAINER"; do
+    if docker inspect "$c" >/dev/null 2>&1; then
+      DOCKER_HOST_MATCH=1
+    fi
+  done
+fi
+
+if [ "$DOCKER_HOST_MATCH" -eq 1 ]; then
   echo "--- LiveKit / SIP ---"
 
   for c in "$SIP_CONTAINER" "$LIVEKIT_CONTAINER"; do
-    STATE="$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo "missing")"
+    if ! docker inspect "$c" >/dev/null 2>&1; then
+      fail "container '$c' not found on this host"
+      continue
+    fi
+    STATE="$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null)"
     if [ "$STATE" = "running" ]; then
       pass "container '$c' is running"
     else
