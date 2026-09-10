@@ -17,7 +17,7 @@ export default defineAgent({
       // Uses the Sarvam plugin directly with your own SARVAM_API_KEY, rather than LiveKit Inference
       stt: new sarvam.STT({
         model: 'saaras:v3',
-        languageCode: 'unknown', // auto-detect the language the user is speaking
+        languageCode: 'hi-IN', // auto-detect the language the user is speaking
         mode: 'transcribe',
       }),
 

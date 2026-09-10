@@ -35,7 +35,7 @@ export function createAgent() {
 
     // A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
     // Uses the Google plugin directly with your own GOOGLE_API_KEY, rather than LiveKit Inference
-    llm: new google.LLM({ model: 'gemini-3.1-flash-lite' }),
+    llm: new google.LLM({ model: 'gemini-3.1-flash-lite',temperature:0.3 }),
 
     // To use a realtime model instead of a voice pipeline, replace the LLM
     // with a RealtimeModel and remove the STT/TTS from the AgentSession
