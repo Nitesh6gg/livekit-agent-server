@@ -1,8 +1,8 @@
-import { ServerOptions, cli, defineAgent, inference, metrics, voice } from '@livekit/agents';
+import { ServerOptions, cli, defineAgent, inference, log, metrics, voice } from '@livekit/agents';
 import * as sarvam from '@livekit/agents-plugin-sarvam';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
-import { createAgent } from './agent.ts';
+import { BENCHMARK_MODE, createAgent } from './agent.ts';
 
 // Load environment variables from a local file.
 // Make sure to set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET
@@ -11,6 +11,10 @@ dotenv.config({ path: '.env' });
 
 export default defineAgent({
   entry: async (ctx) => {
+    // Printed once per job so `bench/preflight.sh` can confirm a benchmark run is actually
+    // running the stripped-down build, not the production one, before ramping load against it.
+    log().info({ benchmarkMode: BENCHMARK_MODE }, 'survey-agent starting');
+
     // Set up a voice AI pipeline using Sarvam STT/TTS and the LiveKit turn detector
     const session = new voice.AgentSession({
       // Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
@@ -74,12 +78,16 @@ export default defineAgent({
     // as a safety net alongside the prompt-level guardrail that asks Avni to end early on misuse.
     // deleteRoom (not session.close) is required to actually hang up the SIP caller, matching the
     // end-call tool below - otherwise the caller's phone line stays connected in an empty room.
-    const HARD_CALL_LIMIT_MS = 15 * 60 * 1000;
-    const hardLimitTimer = setTimeout(async () => {
-      await session.say('Samay ho gaya hai, main call yahin samaapt karti hoon. Dhanyavaad.');
-      await ctx.deleteRoom();
-    }, HARD_CALL_LIMIT_MS);
-    ctx.addShutdownCallback(async () => clearTimeout(hardLimitTimer));
+    // Disabled in benchmark mode: a load-test room has no real caller to protect and the timer
+    // would otherwise cut every step short past the 15-minute mark.
+    if (!BENCHMARK_MODE) {
+      const HARD_CALL_LIMIT_MS = 15 * 60 * 1000;
+      const hardLimitTimer = setTimeout(async () => {
+        await session.say('Samay ho gaya hai, main call yahin samaapt karti hoon. Dhanyavaad.');
+        await ctx.deleteRoom();
+      }, HARD_CALL_LIMIT_MS);
+      ctx.addShutdownCallback(async () => clearTimeout(hardLimitTimer));
+    }
 
     // // Add a virtual avatar to the session, if desired
     // // For other providers, see https://docs.livekit.io/agents/models/avatar/

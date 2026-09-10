@@ -223,3 +223,6 @@ ehthumbs.db
 
 # GitHub CLI
 .github/personal-instructions.md
+
+# Benchmark run output (bench/ scripts are tracked, their generated results are not)
+bench/results/
