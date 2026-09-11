@@ -100,16 +100,27 @@ bash bench/sample-host.sh <results-dir-from-step-2> 2 agent-20
 
 Stop both (Ctrl+C) once the ramp script prints "Ramp complete".
 
-**4. Copy `.19`'s pm2 log for `survey-agent` into the results directory.** This is the file
-`metrics.logMetrics()` writes to (the `MetricsCollected` handler wired in `src/main.ts`) - by
-default pm2 writes it to `~/.pm2/logs/survey-agent-out.log`, but confirm with
-`pm2 logs survey-agent --lines 0` if you're not sure of the exact path.
+**4. Copy everything `.19` wrote into the results directory on `.20`.** Two files live only
+on `.19`'s own filesystem and both need to cross over - it's easy to copy just the pm2 log and
+forget the sampler's CSV, since `bench/sample-host.sh` on `.19` writes to `.19`'s local copy of
+the results directory, not `.20`'s:
 
 ```bash
-scp .19:~/.pm2/logs/survey-agent-out.log <results-dir>/survey-agent-19.log
+# the metrics.logMetrics() output (the MetricsCollected handler wired in src/main.ts) - by
+# default pm2 writes it to ~/.pm2/logs/survey-agent-out.log; confirm with
+# `pm2 logs survey-agent --lines 0` if unsure of the exact path
+scp root@192.168.36.19:~/.pm2/logs/survey-agent-out.log <results-dir>/survey-agent-19.log
+
+# .19's own host-resource sampler output - without this, parse-metrics.mjs can't report .19's
+# CPU/mem at all, only .20's
+scp root@192.168.36.19:<results-dir>/host-agent-19.csv <results-dir>/host-agent-19.csv
 ```
 
-**5. Analyze:**
+`host-agent-20.csv` needs no copy - that sampler already ran locally on `.20`.
+
+**5. Analyze.** Requires Node on `.20` (only Docker and the `lk` binary have been needed here
+until now) - `apt-get install -y nodejs` is enough, the script has no dependencies beyond
+Node's built-ins so any reasonably recent version works:
 
 ```bash
 node bench/parse-metrics.mjs \
