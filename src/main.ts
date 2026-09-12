@@ -115,5 +115,9 @@ cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
     agentName: 'survey-agent',
+    // Default (0.7) was rejecting new jobs at ~71 concurrent rooms in the Phase 1 benchmark
+    // while CPU was still only at 78% - raised to find the real ceiling before load-shedding
+    // kicks in. Re-tune once that ceiling is known (docs/PRD.md §6).
+    loadThreshold: 0.9,
   }),
 );
