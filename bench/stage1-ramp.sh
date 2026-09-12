@@ -67,10 +67,14 @@ if command -v systemd-run >/dev/null 2>&1; then
   USE_CPU_LIMIT=1
 else
   echo "WARNING: systemd-run not found - steps will run without a CPU cap on the generator."
-  # systemd-run sets LimitNOFILE per-scope below; without it, raise the shell's own limit so
-  # the fallback path isn't silently capped at whatever the default (often 1024) is.
-  ulimit -n "$NOFILE_LIMIT" 2>/dev/null || echo "WARNING: could not raise ulimit -n to $NOFILE_LIMIT"
 fi
+
+# Raised here rather than via `systemd-run -p LimitNOFILE=...`: a --scope unit wraps an
+# already-forked process into a cgroup rather than exec'ing it through the service manager,
+# and rejects rlimit-style properties like LimitNOFILE ("Unknown assignment") even though
+# cgroup settings like CPUQuota work fine there. Setting it here instead relies on normal
+# fork/exec inheritance, which applies whether or not systemd-run is used below.
+ulimit -n "$NOFILE_LIMIT" 2>/dev/null || echo "WARNING: could not raise ulimit -n to $NOFILE_LIMIT"
 
 step_num=0
 for rooms in "${ROOMS_STEPS[@]}"; do
@@ -81,7 +85,7 @@ for rooms in "${ROOMS_STEPS[@]}"; do
 
   LOG_FILE="$OUT_DIR/step-${step_num}-rooms-${rooms}.log"
   if [ "$USE_CPU_LIMIT" -eq 1 ]; then
-    systemd-run --scope --quiet -p CPUQuota="$CPU_QUOTA" -p LimitNOFILE="$NOFILE_LIMIT" \
+    systemd-run --scope --quiet -p CPUQuota="$CPU_QUOTA" \
       --unit="bench-lk-${RUN_ID}-${step_num}" \
       "$LK" perf agent-load-test \
         --rooms "$rooms" \
