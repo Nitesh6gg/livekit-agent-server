@@ -34,6 +34,10 @@ ECHO_DELAY="${ECHO_DELAY:-5s}"
 STEP_DURATION="${STEP_DURATION:-5m}"
 COOLDOWN_S="${COOLDOWN_S:-30}"
 CPU_QUOTA="${CPU_QUOTA:-100%}"
+# 100 concurrent rooms means hundreds of simultaneous sockets from one generator process -
+# the default open-file limit (often 1024) can silently cap the generator itself well below
+# the room count you asked for, in a way that's indistinguishable from an agent-side ceiling.
+NOFILE_LIMIT="${NOFILE_LIMIT:-65536}"
 SIP_CONTAINER="${SIP_CONTAINER:-livekit-sip-1}"
 # Matches the step sequence in docs/PRD.md §6.3. Override with a shorter/longer list via
 # ROOMS_STEPS="1 2 5" if you want a quick smoke run first.
@@ -63,6 +67,9 @@ if command -v systemd-run >/dev/null 2>&1; then
   USE_CPU_LIMIT=1
 else
   echo "WARNING: systemd-run not found - steps will run without a CPU cap on the generator."
+  # systemd-run sets LimitNOFILE per-scope below; without it, raise the shell's own limit so
+  # the fallback path isn't silently capped at whatever the default (often 1024) is.
+  ulimit -n "$NOFILE_LIMIT" 2>/dev/null || echo "WARNING: could not raise ulimit -n to $NOFILE_LIMIT"
 fi
 
 step_num=0
@@ -74,7 +81,7 @@ for rooms in "${ROOMS_STEPS[@]}"; do
 
   LOG_FILE="$OUT_DIR/step-${step_num}-rooms-${rooms}.log"
   if [ "$USE_CPU_LIMIT" -eq 1 ]; then
-    systemd-run --scope --quiet -p CPUQuota="$CPU_QUOTA" \
+    systemd-run --scope --quiet -p CPUQuota="$CPU_QUOTA" -p LimitNOFILE="$NOFILE_LIMIT" \
       --unit="bench-lk-${RUN_ID}-${step_num}" \
       "$LK" perf agent-load-test \
         --rooms "$rooms" \

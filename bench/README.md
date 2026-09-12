@@ -83,10 +83,21 @@ cooldown between. Override with env vars:
 ROOMS_STEPS="1 2 5" STEP_DURATION=2m bash bench/stage1-ramp.sh   # quick smoke run first
 ```
 
-It wraps each step in a `systemd-run --scope -p CPUQuota=...` unit so the generator itself
-doesn't compete unboundedly with the SIP/SFU containers also running on `.20`. Default cap is
-one core (`CPU_QUOTA=100%`); raise it if the generator itself becomes the bottleneck at high
-room counts (its own audio encode/decode cost is not free).
+It wraps each step in a `systemd-run --scope -p CPUQuota=... -p LimitNOFILE=...` unit so the
+generator itself doesn't compete unboundedly with the SIP/SFU containers also running on
+`.20`, and can't silently cap itself below the room count you asked for. Defaults: one core
+(`CPU_QUOTA=100%`) and 65536 open files (`NOFILE_LIMIT=65536`). At high room counts, raise the
+CPU quota - a single generator process encoding/negotiating 60-100+ simultaneous WebRTC
+streams on ~1 core became the actual bottleneck in earlier testing, producing failures that
+looked like an agent-capacity ceiling but weren't:
+
+```bash
+CPU_QUOTA=400% ROOMS_STEPS="100" STEP_DURATION=6m bash bench/stage1-ramp.sh
+```
+
+The longer step duration matters too: rooms are created sequentially at roughly 1s/room, so
+reaching 100 concurrent rooms alone can take most of a 2-minute step, leaving little steady-state
+time to actually measure. `STEP_DURATION=6m` leaves room for both.
 
 **3. In two more terminals, one per host**, started before you press Enter in step 2:
 

@@ -115,9 +115,22 @@ cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
     agentName: 'survey-agent',
-    // Default (0.7) was rejecting new jobs at ~71 concurrent rooms in the Phase 1 benchmark
-    // while CPU was still only at 78% - raised to find the real ceiling before load-shedding
-    // kicks in. Re-tune once that ceiling is known (docs/PRD.md §6).
+    // Default caps at min(cores, 4) specifically to limit idle-process memory on large
+    // machines (per LiveKit's own docs) - raised since .19 has 16 cores/31GB and idle
+    // processes cost ~230MB each, well within budget. Fewer cold forks under load means
+    // fewer jobs blocked on initializeProcessTimeout below.
+    numIdleProcesses: 16,
+    // Default is 10s. A cold-forked process competing with ~65 already-running jobs for CPU
+    // plausibly needs longer than that to initialize - this is the leading theory for why
+    // job dispatch appeared to hang around 66-71 concurrent rooms in the Phase 1 benchmark
+    // (docs/PRD.md §6), rather than the load-shedding theory tested and ruled out first.
+    initializeProcessTimeout: 30_000,
+    // Deliberate ceiling of ~108 concurrent jobs (activeJobs / 120 hits 0.9 at 108), chosen
+    // above the 100-room Phase 1 benchmark target so this config can't silently cap the
+    // measurement below what's being tested. CPU-based load_fnc was tried first and ruled
+    // out as the cause of the 66-71 room cutoff (confirmed via source verification, not
+    // just re-reading the same log) - see docs/PRD.md §6 for the full investigation.
+    loadFunc: async (server) => Math.min(server.activeJobs.length / 120, 1.0),
     loadThreshold: 0.9,
   }),
 );
