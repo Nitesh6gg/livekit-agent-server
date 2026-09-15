@@ -111,6 +111,17 @@ export default defineAgent({
 });
 
 // Run the agent server
+//
+// NUM_IDLE_PROCESSES overrides numIdleProcesses below, for go-agent-worker's
+// bench/node-baseline.sh (docs/DECISIONS.md ADR-019 in that repo). That script
+// measures Node's own per-call CPU floor against the same caller.ogg used for the
+// Go worker's ablation, and 16 pre-warmed V8 processes each carry a non-zero
+// baseline cost of their own - large enough next to the floor being measured to
+// distort it. Every other invocation is unaffected: the default stays 16.
+const numIdleProcessesEnv = process.env.NUM_IDLE_PROCESSES;
+const numIdleProcessesParsed = numIdleProcessesEnv !== undefined ? Number(numIdleProcessesEnv) : NaN;
+const numIdleProcesses = Number.isFinite(numIdleProcessesParsed) ? numIdleProcessesParsed : 16;
+
 cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
@@ -119,7 +130,7 @@ cli.runApp(
     // machines (per LiveKit's own docs) - raised since .19 has 16 cores/31GB and idle
     // processes cost ~230MB each, well within budget. Fewer cold forks under load means
     // fewer jobs blocked on initializeProcessTimeout below.
-    numIdleProcesses: 16,
+    numIdleProcesses,
     // Default is 10s. A cold-forked process competing with ~65 already-running jobs for CPU
     // plausibly needs longer than that to initialize - this is the leading theory for why
     // job dispatch appeared to hang around 66-71 concurrent rooms in the Phase 1 benchmark
